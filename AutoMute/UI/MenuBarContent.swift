@@ -9,7 +9,7 @@ struct MenuBarContent: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("AutoMute")
                 .font(.headline)
-            Text(monitor.statusText)
+            Text(monitor.status.title)
                 .foregroundStyle(.secondary)
             Text("Output: \(monitor.defaultDeviceName)")
                 .font(.caption)
@@ -24,7 +24,7 @@ struct MenuBarContent: View {
             Button("Unmute Now") {
                 monitor.unmuteNow()
             }
-            .disabled(monitor.statusText != "Muted")
+            .disabled(monitor.status != .muted)
 
             Toggle(
                 "Launch at Login",
@@ -49,9 +49,7 @@ struct MenuBarContent: View {
 
 enum LaunchAtLogin {
     static var isEnabled: Bool {
-        get {
-            SMAppService.mainApp.status == .enabled
-        }
+        get { SMAppService.mainApp.status == .enabled }
         set {
             do {
                 if newValue {
@@ -60,7 +58,7 @@ enum LaunchAtLogin {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                // Ignore registration errors (e.g. unsigned debug builds).
+                // Unsigned debug builds often cannot register; binding re-reads status.
             }
         }
     }

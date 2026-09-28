@@ -19,21 +19,8 @@ struct MenuBarLabel: View {
     @ObservedObject var monitor: AudioRouteMonitor
 
     var body: some View {
-        Image(systemName: symbolName)
-            .accessibilityLabel("AutoMute \(monitor.statusText)")
-    }
-
-    private var symbolName: String {
-        switch monitor.statusText {
-        case "Muted":
-            return "speaker.slash.fill"
-        case "Bluetooth":
-            return "headphones"
-        case "Disabled":
-            return "speaker.slash"
-        default:
-            return "ear"
-        }
+        Image(systemName: monitor.status.symbolName)
+            .accessibilityLabel("AutoMute \(monitor.status.title)")
     }
 }
 

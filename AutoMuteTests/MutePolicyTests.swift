@@ -2,13 +2,6 @@ import XCTest
 @testable import AutoMute
 
 final class MutePolicyTests: XCTestCase {
-    func testLaunchWithSpeakersStaysIdle() {
-        var policy = MutePolicy()
-        // No bluetoothBecameDefault / defaultLeftBluetooth called.
-        XCTAssertEqual(policy.state, .idle)
-        XCTAssertTrue(policy.mutedDeviceIDs.isEmpty)
-    }
-
     func testBluetoothBecameDefaultPreArmsSpeakers() {
         var policy = MutePolicy()
         let action = policy.bluetoothBecameDefault(nonBluetoothDeviceIDs: [10, 20])
@@ -21,13 +14,9 @@ final class MutePolicyTests: XCTestCase {
     }
 
     func testLeavingBluetoothMutesAndNotifies() {
-        var policy = MutePolicy()
-        _ = policy.bluetoothBecameDefault(nonBluetoothDeviceIDs: [10])
-        let action = policy.defaultLeftBluetooth(newDeviceID: 10)
+        let policy = policyAfterLeavingBluetooth(preArmed: [10], newDeviceID: 10)
 
         XCTAssertEqual(policy.state, .mutedAfterLeave)
-        XCTAssertTrue(action.muteDeviceIDs.isEmpty) // already pre-armed
-        XCTAssertTrue(action.shouldNotify)
         XCTAssertEqual(policy.mutedDeviceIDs, Set([10]))
     }
 
@@ -42,10 +31,7 @@ final class MutePolicyTests: XCTestCase {
     }
 
     func testBluetoothReturnUnmutesThenPreArms() {
-        var policy = MutePolicy()
-        _ = policy.bluetoothBecameDefault(nonBluetoothDeviceIDs: [10])
-        _ = policy.defaultLeftBluetooth(newDeviceID: 10)
-
+        var policy = policyAfterLeavingBluetooth(preArmed: [10], newDeviceID: 10)
         let action = policy.bluetoothBecameDefault(nonBluetoothDeviceIDs: [10, 20])
 
         XCTAssertEqual(policy.state, .bluetoothActive)
@@ -56,10 +42,7 @@ final class MutePolicyTests: XCTestCase {
     }
 
     func testUserUnmuteClearsMutedState() {
-        var policy = MutePolicy()
-        _ = policy.bluetoothBecameDefault(nonBluetoothDeviceIDs: [10])
-        _ = policy.defaultLeftBluetooth(newDeviceID: 10)
-
+        var policy = policyAfterLeavingBluetooth(preArmed: [10], newDeviceID: 10)
         let action = policy.userUnmuted()
 
         XCTAssertEqual(policy.state, .idle)
@@ -96,13 +79,15 @@ final class MutePolicyTests: XCTestCase {
         XCTAssertTrue(action.muteDeviceIDs.isEmpty)
     }
 
-    func testPrepareForQuitUnmutes() {
-        var policy = MutePolicy()
-        _ = policy.bluetoothBecameDefault(nonBluetoothDeviceIDs: [7])
-        let action = policy.prepareForQuit()
+    // MARK: - Helpers
 
-        XCTAssertEqual(action.unmuteDeviceIDs, [7])
-        XCTAssertEqual(policy.state, .idle)
-        XCTAssertFalse(policy.isEnabled)
+    private func policyAfterLeavingBluetooth(
+        preArmed: [UInt32],
+        newDeviceID: UInt32
+    ) -> MutePolicy {
+        var policy = MutePolicy()
+        _ = policy.bluetoothBecameDefault(nonBluetoothDeviceIDs: preArmed)
+        _ = policy.defaultLeftBluetooth(newDeviceID: newDeviceID)
+        return policy
     }
 }

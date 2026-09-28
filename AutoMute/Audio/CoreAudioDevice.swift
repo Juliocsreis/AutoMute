@@ -2,14 +2,24 @@ import CoreAudio
 import Foundation
 
 enum CoreAudioDevice {
+    static let defaultOutputAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+
+    static let devicesAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDevices,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+
+    private static let silentVolumeThreshold: Float32 = 0.01
+
     static func defaultOutputDeviceID() -> AudioDeviceID? {
         var deviceID = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
+        var address = defaultOutputAddress
         let status = AudioObjectGetPropertyData(
             AudioObjectID(kAudioObjectSystemObject),
             &address,
@@ -25,11 +35,7 @@ enum CoreAudioDevice {
     }
 
     static func allOutputDeviceIDs() -> [AudioDeviceID] {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
+        var address = devicesAddress
         var dataSize: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(
             AudioObjectID(kAudioObjectSystemObject),
@@ -110,7 +116,7 @@ enum CoreAudioDevice {
         }
         // Unmute via volume: restore a reasonable level if currently near silent.
         let current = volumeScalar(of: deviceID) ?? 0
-        if current < 0.01 {
+        if current < silentVolumeThreshold {
             return setVolumeScalar(0.5, deviceID: deviceID)
         }
         return true
@@ -119,7 +125,7 @@ enum CoreAudioDevice {
     static func isMuted(_ deviceID: AudioDeviceID) -> Bool {
         var address = muteAddress()
         guard AudioObjectHasProperty(deviceID, &address) else {
-            return (volumeScalar(of: deviceID) ?? 1) < 0.01
+            return (volumeScalar(of: deviceID) ?? 1) < silentVolumeThreshold
         }
         var mute: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
@@ -218,7 +224,6 @@ enum CoreAudioDevice {
         var address = volumeAddress()
         guard AudioObjectHasProperty(deviceID, &address),
               isPropertySettable(deviceID, &address) else {
-            // Try per-channel volumes if master is missing.
             return setPerChannelVolume(volume, deviceID: deviceID)
         }
         var value = volume

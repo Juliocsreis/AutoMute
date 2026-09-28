@@ -1,7 +1,5 @@
 import Foundation
 
-/// Pure state machine for when AutoMute should mute or unmute.
-/// Free of Core Audio so unit tests can drive transitions without hardware.
 enum MutePolicyState: Equatable {
     case idle
     case bluetoothActive
@@ -14,22 +12,18 @@ struct MutePolicyAction: Equatable {
     var shouldNotify: Bool = false
 }
 
+/// Pure state machine for mute/unmute decisions. Free of Core Audio for unit testing.
 struct MutePolicy: Equatable {
     private(set) var state: MutePolicyState = .idle
     private(set) var mutedDeviceIDs: Set<UInt32> = []
     var isEnabled: Bool = true
 
-    /// Called when the default output becomes a Bluetooth device.
     mutating func bluetoothBecameDefault(nonBluetoothDeviceIDs: [UInt32]) -> MutePolicyAction {
-        guard isEnabled else {
-            return MutePolicyAction()
-        }
+        guard isEnabled else { return MutePolicyAction() }
 
         var action = MutePolicyAction()
-
-        if state == .mutedAfterLeave, !mutedDeviceIDs.isEmpty {
-            action.unmuteDeviceIDs = Array(mutedDeviceIDs)
-            mutedDeviceIDs.removeAll()
+        if state == .mutedAfterLeave {
+            action.unmuteDeviceIDs = takeMutedDeviceIDs()
         }
 
         // Pre-arm non-Bluetooth outputs so a later handoff is already silent.
@@ -43,54 +37,40 @@ struct MutePolicy: Equatable {
         return action
     }
 
-    /// Called when the default output leaves Bluetooth for `newDeviceID`.
     mutating func defaultLeftBluetooth(newDeviceID: UInt32) -> MutePolicyAction {
-        guard isEnabled else {
-            return MutePolicyAction()
-        }
-        guard state == .bluetoothActive else {
-            return MutePolicyAction()
-        }
+        guard isEnabled, state == .bluetoothActive else { return MutePolicyAction() }
 
-        var action = MutePolicyAction()
+        var action = MutePolicyAction(shouldNotify: true)
         if !mutedDeviceIDs.contains(newDeviceID) {
             action.muteDeviceIDs = [newDeviceID]
             mutedDeviceIDs.insert(newDeviceID)
         }
-        action.shouldNotify = true
         state = .mutedAfterLeave
         return action
     }
 
-    /// Manual unmute from the menu bar.
     mutating func userUnmuted() -> MutePolicyAction {
-        var action = MutePolicyAction()
-        if !mutedDeviceIDs.isEmpty {
-            action.unmuteDeviceIDs = Array(mutedDeviceIDs)
-            mutedDeviceIDs.removeAll()
-        }
-        state = .idle
-        return action
+        clearMutedReturningToIdle()
     }
 
-    /// Enable or disable monitoring. Disabling unmutes anything we muted.
     mutating func setEnabled(_ enabled: Bool) -> MutePolicyAction {
         isEnabled = enabled
-        guard !enabled else {
-            return MutePolicyAction()
-        }
-
-        var action = MutePolicyAction()
-        if !mutedDeviceIDs.isEmpty {
-            action.unmuteDeviceIDs = Array(mutedDeviceIDs)
-            mutedDeviceIDs.removeAll()
-        }
-        state = .idle
-        return action
+        guard !enabled else { return MutePolicyAction() }
+        return clearMutedReturningToIdle()
     }
 
-    /// Tear down on quit: unmute devices we still own.
-    mutating func prepareForQuit() -> MutePolicyAction {
-        setEnabled(false)
+    // MARK: - Private
+
+    private mutating func takeMutedDeviceIDs() -> [UInt32] {
+        let ids = Array(mutedDeviceIDs)
+        mutedDeviceIDs.removeAll()
+        return ids
+    }
+
+    private mutating func clearMutedReturningToIdle() -> MutePolicyAction {
+        var action = MutePolicyAction()
+        action.unmuteDeviceIDs = takeMutedDeviceIDs()
+        state = .idle
+        return action
     }
 }
